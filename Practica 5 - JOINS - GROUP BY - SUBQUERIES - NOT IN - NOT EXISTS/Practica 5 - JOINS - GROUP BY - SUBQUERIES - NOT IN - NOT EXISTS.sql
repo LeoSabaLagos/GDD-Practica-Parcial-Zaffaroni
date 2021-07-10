@@ -214,9 +214,16 @@ SELECT * FROM products
 WHERE manu_code = ‘HRO’ OR stock_num = 1
 */
 
+SELECT * 
+FROM products
+WHERE manu_code = 'HRO'
+UNION
+SELECT * 
+FROM products
+WHERE stock_num = 1
+
 /* 10. 
-Desarrollar una consulta que devuelva 
-	las ciudades y compañías 
+Desarrollar una consulta que devuelva  las ciudades y compañías 
 de todos los Clientes ordenadas alfabéticamente por Ciudad 
 
 pero en la consulta deberán aparecer primero las compañías situadas en Redwood City y luego las demás.
@@ -225,6 +232,15 @@ Formato:
 	Clave de ordenamiento	Ciudad	 	Compañía
 	     (sortkey)			(city)		(company)
 */
+
+SELECT 1 AS sortkey, city AS Ciudad, company AS Compañia
+FROM customer
+WHERE city = 'Redwood City'
+UNION
+SELECT 2 AS sortkey, city AS Ciudad, company AS Compañia
+FROM customer
+WHERE city != 'Redwood City'
+ORDER BY 1, 2
 
 /* 11.
 Desarrollar una consulta que devuelva los dos tipos de productos más vendidos 
@@ -238,6 +254,35 @@ Formato
 		    4               1 
 */
 
+SELECT 
+	i.stock_num Tipo_Producto,
+	SUM(i.quantity) Cantidad
+FROM items i
+
+WHERE i.stock_num IN (
+	SELECT TOP(2) im.stock_num
+	FROM items im 
+	GROUP BY im.stock_num
+	ORDER BY SUM(im.quantity) DESC
+)
+GROUP BY stock_num
+
+UNION
+
+SELECT 
+	i.stock_num Tipo_Producto,
+	SUM(i.quantity) Cantidad
+FROM items i
+
+WHERE i.stock_num IN (
+	SELECT TOP(2) im.stock_num
+	FROM items im 
+	GROUP BY im.stock_num
+	ORDER BY SUM(im.quantity)
+)
+GROUP BY stock_num
+ORDER BY 2 DESC 
+
 --------------------------------------------------------------------------------------------------------------------
 --------------------------------------------------------------------------------------------------------------------
 
@@ -247,6 +292,24 @@ Formato
 Crear una Vista llamada ClientesConMultiplesOrdenes basada en la consulta realizada en el punto 3.b
 con los nombres de atributos solicitados en dicho punto.
 */
+
+GO
+CREATE VIEW ClientesConMultiplesOrdenes
+(Número_de_Cliente,Nombre,Apellido)
+AS
+	SELECT 
+		customer_num AS Número_Cliente,
+		fname AS Nombre,
+		lname AS Apellido
+	FROM customer c
+	
+	WHERE customer_num IN (
+		SELECT customer_num 
+		FROM orders 
+		GROUP BY customer_num 
+		HAVING COUNT(*) > 1
+	) 
+
 
 /* 13.
 Crear una Vista llamada Productos_HRO en base a la consulta
@@ -259,6 +322,14 @@ a. Realizar un INSERT de un Producto con manu_code=’ANZ’ y stock_num=303. Qué su
 b. Realizar un INSERT con manu_code=’HRO’ y stock_num=303. Qué sucede?
 c. Validar los datos insertados a través de la vista.
 */
+
+GO
+CREATE VIEW Productos_HRO
+(stock_num,manu_code,unit_price,unit_code)
+AS
+	SELECT * FROM products
+	WHERE manu_code = 'HRO'
+	WITH CHECK OPTION
 
 --------------------------------------------------------------------------------------------------------------------
 --------------------------------------------------------------------------------------------------------------------
@@ -278,3 +349,57 @@ Luego volver a ejecutar la consulta
 • Completado el ejercicio descripto arriba. 
 	Observar que los resultados del segundo SELECT difieren con respecto al primero.
 */
+
+BEGIN TRANSACTION 
+	INSERT INTO customer(customer_num,fname, lname)
+	VALUES(1000,'Fred','Flintstone')
+
+	SELECT * FROM customer
+	WHERE fname = 'Fred' 
+ROLLBACK TRANSACTION
+END
+
+-- El Rollback elimino el registro insertado dentro de la
+-- transaccion porque era lo deseado al hacer el rollback
+
+SELECT * FROM customer
+WHERE fname = 'Fred'
+
+/* 15. 
+Se ha decidido crear un nuevo fabricante AZZ, quién proveerá parte de los mismos productos
+que provee el fabricante ANZ, los productos serán los que contengan el string ‘tennis’ en su descripción.
+	
+	• Agregar las nuevas filas en la tabla manufact y la tabla products.
+
+	• El código del nuevo fabricante será “AZZ”, 
+	  el nombre de la compañía “AZZIO SA” 
+	  y el tiempo de envío será de 5 días (lead_time).
+
+	• La información del nuevo fabricante “AZZ” de la tabla Products 
+	  será la misma que la del fabricante “ANZ” pero 
+	  sólo para los productos que contengan 'tennis' en su descripción.
+
+	• Tener en cuenta las restricciones de integridad referencial existentes, 
+	  manejar todo dentro de una misma transacción.
+*/
+
+BEGIN TRANSACTION
+	
+	INSERT INTO manufact(manu_code,manu_name,lead_time)
+	VALUES('AZZ','AZZIO SA',5)	
+
+	INSERT INTO products (manu_code, stock_num, unit_price, unit_code) 
+	SELECT
+		'AZZ',
+		p.stock_num,
+		p.unit_price,
+		p.unit_code 
+	FROM products p 
+		JOIN product_types t ON p.stock_num = t.stock_num 
+	WHERE manu_code = 'ANZ' 
+		  AND t.description LIKE '%tennis%'
+
+COMMIT TRANSACTION  
+	
+SELECT * FROM products 
+WHERE manu_code = 'AZZ'
